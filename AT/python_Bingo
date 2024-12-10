@@ -1,0 +1,77 @@
+import asyncio
+import random
+
+#Corrotina para gerar números aleatórios
+async def generator(queue, x_limit):
+    generated_numbers = set()
+    while len(generated_numbers) < x_limit:
+        number = random.randint(0, 100)
+        if number not in generated_numbers:
+            generated_numbers.add(number)
+            await queue.put(number)  #Coloca o número na fila
+            await asyncio.sleep(0.1)  #Simula um intervalo entre sorteios
+
+    await queue.put(None)  #Marca o fim do sorteio
+
+#Corrotina para narrar os números gerados
+async def narrator(queue, players):
+    while True:
+        number = await queue.get()
+        if number is None:  #Fim do sorteio
+            break
+        print(f"Number is {number}")
+        tasks = [player.process_number(number) for player in players]
+        await asyncio.gather(*tasks)
+        
+        # Verifica se há um vencedor
+        winner = next((player for player in players if player.is_winner()), None)
+        if winner:
+            print(f"{winner.name} is the WINNER {winner.cartela} {winner.matched_numbers}")
+            print("Game is over")
+            return  #Encerra o narrador ao encontrar o vencedor
+
+    #Caso o sorteio termine sem vencedores
+    print("Limite de números sorteados atingido, não houve ganhadores.")
+    print("Game is over")
+
+#Classe do jogador
+class Player:
+    def __init__(self, name, cartela):
+        self.name = name
+        self.cartela = set(cartela)
+        self.matched_numbers = set()
+
+    #A corrotina process_number será responsável por processar o número sorteado
+    async def process_number(self, number):
+        if number in self.cartela:
+            self.matched_numbers.add(number)
+        print(f"{self.name} {number} {list(self.cartela)} {len(self.matched_numbers)}")
+
+    def is_winner(self):
+        return self.cartela == self.matched_numbers
+
+#Função principal
+async def main():
+    random.seed(42)  #Define uma semente aleatória (42 para que o player-2 seja o ganhador)
+    x_limit = 1000
+    queue = asyncio.Queue()
+
+    #Inicialização dos jogadores
+    players_list = [
+        ("player-1", [5, 10, 48, 55]),
+        ("player-2", [8, 46, 80, 99]),
+        ("player-3", [17, 29, 78, 95])
+    ]
+    players = [Player(name, cartela) for name, cartela in players_list]
+
+    #Inicialização das corrotinas
+    generator_task = asyncio.create_task(generator(queue, x_limit))
+    narrator_task = asyncio.create_task(narrator(queue, players))
+    
+    #Aguarda o narrador concluir
+    await narrator_task
+    #Cancela o gerador caso ele ainda esteja ativo
+    if not generator_task.done():
+        generator_task.cancel()
+
+asyncio.run(main())

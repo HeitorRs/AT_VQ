@@ -1,0 +1,92 @@
+import concurrent.futures
+import threading
+import time
+
+database = {
+    12345: {"nome": "Heitor", "nota": 9.5},
+    23456: {"nome": "João", "nota": 7.2},
+    34567: {"nome": "Letícia", "nota": 8.3},
+    45678: {"nome": "Pedro", "nota": 6.7},
+    56789: {"nome": "Maria", "nota": 9.1},
+    78910: {"nome": "Carla", "nota": 7.1},
+    98765: {"nome": "Vitor", "nota": 5.4},
+    43210: {"nome": "Mario", "nota": 10.0},
+    24681: {"nome": "Lucia", "nota": 9.9},
+    97531: {"nome": "Leonardo", "nota": 8.1}
+}
+
+#Função para simular o acesso ao banco de dados com latência
+def get_record_by_id(matricula):
+    time.sleep(3)
+    record = database.get(matricula)
+    if record:
+        return (record["nome"], record["nota"])
+    return None
+
+#Função para simular a consulta a todos os registros com latência de 30 segundos
+def get_all_records():
+    time.sleep(30)
+    return [(matricula, data["nome"], data["nota"]) for matricula, data in database.items()]
+
+
+#Função para simular a execução concorrente de consultas
+def run_concurrent_queries():
+    matriculas = [12345, 23456, 34567, 45678, 56789]
+    results = []
+
+    #Função para realizar a consulta de uma matrícula
+    def fetch_record(matricula):
+        name, grade = get_record_by_id(matricula)
+        print(f"Consulta para matrícula {matricula}: {name} - Nota: {grade}")
+        results.append(grade)
+
+    threads = []
+
+    #Criando e iniciando uma thread para cada consulta
+    for matricula in matriculas:
+        thread = threading.Thread(target=fetch_record, args=(matricula,))
+        threads.append(thread)
+        thread.start()
+
+    #Aguardando todas as threads terminarem
+    for thread in threads:
+        thread.join()
+
+    #Cálculo da média das notas
+    if results:
+        avg_grade = sum(results) / len(results)
+        print(f"\nNota média das consultas concorrentes: {avg_grade:.2f}")
+
+#Função para simular consulta assíncrona a todos os registros com cancelamento
+def run_async_query_with_cancel():
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        #Iniciando a consulta assíncrona a todos os registros
+        future_all_records = executor.submit(get_all_records)
+
+        time.sleep(1)
+        matricula = 12345
+        nome, nota = get_record_by_id(matricula)
+        print(f"\nConsulta a matrícula {matricula} enquanto aguarda consulta completa: {nome} - Nota: {nota}")
+
+        #Tentando cancelar a consulta de todos os registros
+        future_all_records.cancel()
+        if future_all_records.cancelled():
+            print("\nA consulta a todos os registros foi cancelada com sucesso.")
+        else:
+            print("\nA consulta a todos os registros não pôde ser cancelada.")
+            print("\nAguardando a consulta completa...")
+            try:
+                all_records = future_all_records.result()
+                print("\nConsulta a todos os registros concluída:")
+                for record in all_records:
+                    print(f"Matrícula: {record[0]}, Nome: {record[1]}, Nota: {record[2]}")
+            except Exception as e:
+                print(f"Erro durante a consulta a todos os registros: {e}")
+
+        
+#Executando as funções
+print("Iniciando consultas concorrentes...")
+run_concurrent_queries()
+
+print("\nIniciando consulta assíncrona com cancelamento...")
+run_async_query_with_cancel()
